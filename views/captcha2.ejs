@@ -1,0 +1,21 @@
+<%- include('partials/header') %>
+<div class="flex items-center justify-center h-screen">
+  <div class="text-center">
+    <section class="hero bg-white">
+      <div class="hero-body">
+        <section class="container mx-auto text-center">
+    <form method="POST" action="/f/success" id="f">
+    <h1 class="text-3xl font-bold mb-4">Almost there</h1>
+    <h2 class="mb-5">Please help us fight spam by clicking the box below</h2>
+    <div class="mb-10">
+    <div class="frc-captcha" data-sitekey="<%=siteKey%>" data-callback="success"></div>
+    </div>
+  </section>
+</form>
+
+<script type="text/javascript">
+function success(solution) {
+ document.getElementById('f').submit();
+}
+</script>
+
