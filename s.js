@@ -19,6 +19,7 @@ const util = require('util');
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
+const cookieParser = require('cookie-parser');
 
 require('dotenv').config();
 
@@ -74,7 +75,9 @@ var secret = 'A1S1J4O21B1U8I5SJC03L9UFUEMF57CLHCOPDVV7QU2OTJ6CLAQ27RGEBG';
 var siteKey = 'FCMH6UHMB0UDUCVL'
 
 app.use(morgan('tiny'))
+app.use(cookieParser());
 //app.use(cors())
+
 const endpointSecret = "whsec_b6kNnUBEDqEvSUvnPJEB8ddRyjaP9kty";
 
 app.get('/f/ref/:id', function(req, res) {
@@ -212,6 +215,14 @@ app.get('/f/get-submission-api/:id', (req, res) => {
 });
 
 
+
+
+const client = new OAuth2Client({
+  clientId: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  redirectUri: process.env.GOOGLE_REDIRECT_URI,
+});
+
 app.get("/f/me", (req, res) => {
 	const token = req.cookies.session;
 
@@ -235,14 +246,6 @@ app.get("/f/me", (req, res) => {
 	}
 });
 
-
-
-
-const client = new OAuth2Client({
-  clientId: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  redirectUri: process.env.GOOGLE_REDIRECT_URI,
-});
 
 // Start Google OAuth
 app.get("/f/auth/google", (req, res) => {
@@ -279,12 +282,14 @@ app.get("/f/auth/google/callback", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.cookie("session", sessionToken, {
-      httpOnly: true,
-      secure: true,        // fabform.io uses HTTPS
-      sameSite: "lax",
-      path: "/",
-    });
+res.cookie("session", sessionToken, {
+	  httpOnly: true,     // protects from JS access
+	  secure: true,       // required for HTTPS
+	  sameSite: "none",   // required for cross-domain cookies
+	  domain: ".fabform.io", // allows subdomain sharing
+	  path: "/",
+});
+
 
     res.redirect("https://app.fabform.io/login-success");
   } catch (err) {

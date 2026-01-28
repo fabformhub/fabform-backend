@@ -1,0 +1,38 @@
+app.get("/f/auth/google/callback", async (req, res) => {
+  try {
+    const { tokens } = await client.getToken(req.query.code);
+    const idToken = tokens.id_token;
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    const sessionToken = jwt.sign(
+      {
+        sub: payload.sub,
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.cookie("session", sessionToken, {
+      httpOnly: true,
+      secure: true,        // fabform.io uses HTTPS
+      sameSite: "lax",
+      path: "/",
+    });
+
+    res.redirect("https://app.fabform.io/login-success");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("OAuth error");
+  }
+});
+
+
