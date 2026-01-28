@@ -1,38 +1,57 @@
+// Google OAuth callback
 app.get("/f/auth/google/callback", async (req, res) => {
   try {
+    // 1. Exchange code for Google tokens
     const { tokens } = await client.getToken(req.query.code);
     const idToken = tokens.id_token;
 
+    // 2. Verify Google ID token
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
+    // payload.email, payload.name, payload.picture
 
-    const sessionToken = jwt.sign(
-      {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+    const email = payload.email;
+
+    // 3. Look up user by email (your system's unique identifier)
+    db.get(
+      `SELECT * FROM users WHERE email = ?`,
+      [email],
+      (err, row) => {
+        if (row) {
+          // user exists → finish login
+          return finishLogin(res, row.id);
+        }
+
+        // 4. Create new user
+        const uid = nanoid.nanoid(25);
+
+        db.run(
+          `INSERT INTO users (email, verified, uid)
+           VALUES (?, ?, ?)`,
+          [
+            email,
+            1, // Google users are always verified
+            uid
+          ],
+          function (err) {
+            if (err) {
+              console.error("DB insert error:", err);
+              return res.redirect("https://app.fabform.io/login-error");
+            }
+
+            // this.lastID = new user_id
+            finishLogin(res, this.lastID);
+          }
+        );
+      }
     );
-
-    res.cookie("session", sessionToken, {
-      httpOnly: true,
-      secure: true,        // fabform.io uses HTTPS
-      sameSite: "lax",
-      path: "/",
-    });
-
-    res.redirect("https://app.fabform.io/login-success");
   } catch (err) {
     console.error(err);
     res.status(500).send("OAuth error");
   }
 });
-
 

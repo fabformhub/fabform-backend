@@ -216,7 +216,6 @@ app.get('/f/get-submission-api/:id', (req, res) => {
 
 
 
-
 const client = new OAuth2Client({
   clientId: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -224,27 +223,38 @@ const client = new OAuth2Client({
 });
 
 app.get("/f/me", (req, res) => {
-	const token = req.cookies.session;
+  const token = req.cookies.session;
 
-	if (!token) {
-		return res.status(401).json({ error: "Not authenticated" });
-	}
+  if (!token) {
+    return res.status(401).json({ error: "Not authenticated" });
+  }
 
-	try {
-		const user = jwt.verify(token, process.env.JWT_SECRET);
+  try {
+    const { user_id } = jwt.verify(token, process.env.JWT_SECRET);
 
-		// You can return whatever fields you want the frontend to use
-		return res.json({
-			email: user.email,
-			name: user.name,
-			picture: user.picture,
-			id: user.id,     // optional if you store it
-			tier: user.tier  // optional if you store it
-		});
-	} catch (err) {
-		return res.status(401).json({ error: "Invalid token" });
-	}
+    db.get(
+      `SELECT id, email, tier 
+       FROM users 
+       WHERE id = ?`,
+      [user_id],
+      (err, row) => {
+        if (err) {
+          console.error("DB error:", err);
+          return res.status(500).json({ error: "Database error" });
+        }
+
+        if (!row) {
+          return res.status(401).json({ error: "User not found" });
+        }
+
+        return res.json(row);
+      }
+    );
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
 });
+
 
 
 // Start Google OAuth
@@ -258,48 +268,91 @@ app.get("/f/auth/google", (req, res) => {
   res.redirect(url);
 });
 
+
+
 // Google OAuth callback
 app.get("/f/auth/google/callback", async (req, res) => {
   try {
+    // 1. Exchange code for Google tokens
     const { tokens } = await client.getToken(req.query.code);
     const idToken = tokens.id_token;
 
+    // 2. Verify Google ID token
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
+    const email = payload.email;
 
-    const sessionToken = jwt.sign(
-      {
-        sub: payload.sub,
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+    // 3. Look up user by email
+    db.get(
+      `SELECT id FROM users WHERE email = ?`,
+      [email],
+      (err, row) => {
+        if (err) {
+          console.error("DB lookup error:", err);
+          return res.redirect("https://app.fabform.io/login-error");
+        }
+
+        if (row) {
+          // User exists → finish login
+          return finishLogin(res, row.id);
+        }
+
+        // 4. Create new user (Google users have no password)
+        const uid = nanoid.nanoid(25);
+
+        db.run(
+          `INSERT INTO users (email, password, verified, uid, tier)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            email,
+            "GOOGLE_OAUTH_USER",   // dummy password
+            1,                     // verified
+            uid,
+            0                      // default tier
+          ],
+          function (err) {
+            if (err) {
+              console.error("DB insert error:", err);
+              return res.redirect("https://app.fabform.io/login-error");
+            }
+
+            // this.lastID = new user_id
+            finishLogin(res, this.lastID);
+          }
+        );
+      }
     );
 
-res.cookie("session", sessionToken, {
-	  httpOnly: true,     // protects from JS access
-	  secure: true,       // required for HTTPS
-	  sameSite: "none",   // required for cross-domain cookies
-	  domain: ".fabform.io", // allows subdomain sharing
-	  path: "/",
-});
-
-
-    res.redirect("https://app.fabform.io/login-success");
   } catch (err) {
-    console.error(err);
+    console.error("OAuth error:", err);
     res.status(500).send("OAuth error");
   }
 });
 
 
+// 5. Create your session cookie containing YOUR user_id
+function finishLogin(res, user_id) {
+  const sessionToken = jwt.sign(
+    { user_id },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 
+  res.cookie("session", sessionToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    domain: ".fabform.io",
+    path: "/",
+  });
+
+  res.redirect("https://app.fabform.io/login-success");
+}
+ 
 
 app.get('/f/get-user-info/:email', (req, res) => {
 	var email = req.params.email
