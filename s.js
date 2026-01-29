@@ -268,6 +268,70 @@ app.get("/f/auth/google", (req, res) => {
   res.redirect(url);
 });
 
+//Google OAuth callback
+app.get("/f/auth/google/callback", async (req, res) => {
+  try {
+    // 1. Exchange code for Google tokens
+    const { tokens } = await client.getToken(req.query.code);
+    const idToken = tokens.id_token;
+
+    // 2. Verify Google ID token
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const email = payload.email;
+
+    // 3. Look up user by email
+    db.get(
+      `SELECT id FROM users WHERE email = ?`,
+      [email],
+      (err, row) => {
+        if (err) {
+          console.error("DB lookup error:", err);
+          return res.redirect("https://app.fabform.io/login-error");
+        }
+
+        if (row) {
+          // User exists → finish login
+          return finishLogin(res, row.id);
+        }
+
+        // 4. Create new user (Google users have no password)
+        const uid = nanoid.nanoid(25);
+
+        db.run(
+          `INSERT INTO users (email, password, verified, uid, tier)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            email,
+            "GOOGLE_OAUTH_USER",   // dummy password
+            1,                     // verified
+            uid,
+            0                      // default tier
+          ],
+          function (err) {
+            if (err) {
+              console.error("DB insert error:", err);
+              return res.redirect("https://app.fabform.io/login-error");
+            }
+
+            // this.lastID = new user_id
+            sendEmailWelcome(email);
+            finishLogin(res, this.lastID);
+          }
+        );
+      }
+    );
+
+  } catch (err) {
+    console.error("OAuth error:", err);
+    res.status(500).send("OAuth error");
+  }
+});
+
 
 
 // Google OAuth callback
@@ -370,7 +434,9 @@ app.get("/f/auth/github/callback", async (req, res) => {
             }
 
             // this.lastID = new user_id
+            sendEmailWelcome(email);
             finishLogin(res, this.lastID);
+
           }
         );
       }
