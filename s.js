@@ -271,66 +271,13 @@ app.get("/f/auth/google", (req, res) => {
 
 
 // Google OAuth callback
-app.get("/f/auth/google/callback", async (req, res) => {
-  try {
-    // 1. Exchange code for Google tokens
-    const { tokens } = await client.getToken(req.query.code);
-    const idToken = tokens.id_token;
+app.get('/f/auth/github', (req, res) => {
+  const redirect = encodeURIComponent(process.env.GITHUB_REDIRECT_URI);
+  const clientId = process.env.GITHUB_CLIENT_ID;
 
-    // 2. Verify Google ID token
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirect}&scope=read:user user:email`;
 
-    const payload = ticket.getPayload();
-    const email = payload.email;
-
-    // 3. Look up user by email
-    db.get(
-      `SELECT id FROM users WHERE email = ?`,
-      [email],
-      (err, row) => {
-        if (err) {
-          console.error("DB lookup error:", err);
-          return res.redirect("https://app.fabform.io/login-error");
-        }
-
-        if (row) {
-          // User exists → finish login
-          return finishLogin(res, row.id);
-        }
-
-        // 4. Create new user (Google users have no password)
-        const uid = nanoid.nanoid(25);
-
-        db.run(
-          `INSERT INTO users (email, password, verified, uid, tier)
-           VALUES (?, ?, ?, ?, ?)`,
-          [
-            email,
-            "GOOGLE_OAUTH_USER",   // dummy password
-            1,                     // verified
-            uid,
-            0                      // default tier
-          ],
-          function (err) {
-            if (err) {
-              console.error("DB insert error:", err);
-              return res.redirect("https://app.fabform.io/login-error");
-            }
-
-            // this.lastID = new user_id
-            finishLogin(res, this.lastID);
-          }
-        );
-      }
-    );
-
-  } catch (err) {
-    console.error("OAuth error:", err);
-    res.status(500).send("OAuth error");
-  }
+  res.redirect(url);
 });
 
 
@@ -352,7 +299,89 @@ function finishLogin(res, user_id) {
 
   res.redirect("https://app.fabform.io/login-success");
 }
- 
+
+
+app.get("/f/auth/github/callback", async (req, res) => {
+  const code = req.query.code;
+
+  try {
+    // 1. Exchange code for GitHub access token
+    const tokenRes = await axios.post(
+      "https://github.com/login/oauth/access_token",
+      {
+        client_id: process.env.GITHUB_CLIENT_ID,
+        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        code
+      },
+      {
+        headers: { Accept: "application/json" }
+      }
+    );
+
+    const accessToken = tokenRes.data.access_token;
+
+    // 2. Fetch GitHub user profile
+    const userRes = await axios.get("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    const ghUser = userRes.data;
+
+    // 3. Fetch primary email (GitHub hides email by default)
+    const emailRes = await axios.get("https://api.github.com/user/emails", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    const emails = emailRes.data;
+    const primaryEmail = emails.find(e => e.primary)?.email;
+
+    if (!primaryEmail) {
+      console.error("GitHub user has no primary email");
+      return res.redirect("https://app.fabform.io/login-error");
+    }
+
+    const email = primaryEmail;
+
+    // 4. Look up user by email (same as Google)
+    db.get(
+      `SELECT * FROM users WHERE email = ?`,
+      [email],
+      (err, row) => {
+        if (row) {
+          // User exists → finish login
+          return finishLogin(res, row.id);
+        }
+
+        // 5. Create new user (same pattern as Google)
+        const uid = nanoid.nanoid(25);
+
+        db.run(
+          `INSERT INTO users (email, verified, uid)
+           VALUES (?, ?, ?)`,
+          [
+            email,
+            1, // GitHub users are verified by provider
+            uid
+          ],
+          function (err) {
+            if (err) {
+              console.error("DB insert error:", err);
+              return res.redirect("https://app.fabform.io/login-error");
+            }
+
+            // this.lastID = new user_id
+            finishLogin(res, this.lastID);
+          }
+        );
+      }
+    );
+
+  } catch (err) {
+    console.error("GitHub OAuth error:", err);
+    res.redirect("https://app.fabform.io/login-error");
+  }
+});
+
 
 app.get('/f/get-user-info/:email', (req, res) => {
 	var email = req.params.email
