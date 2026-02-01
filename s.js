@@ -88,6 +88,7 @@ app.get('/f/ref/:id', function(req, res) {
 
 // Had to put this before the app.use(express.json()) // for json
 //
+//
 app.post('/f/order_event', express.raw({
 	type: 'application/json'
 }), (request, response) => {
@@ -420,12 +421,14 @@ app.get("/f/auth/github/callback", async (req, res) => {
         const uid = nanoid.nanoid(25);
 
         db.run(
-          `INSERT INTO users (email, verified, uid)
-           VALUES (?, ?, ?)`,
+          `INSERT INTO users (email, password, verified, uid, tier)
+           VALUES (?, ?, ?, ?, ?)`,
           [
             email,
+            "GITHUB_OAUTH_USER",
             1, // GitHub users are verified by provider
-            uid
+            uid,
+           0
           ],
           function (err) {
             if (err) {
