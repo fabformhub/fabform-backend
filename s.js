@@ -24,6 +24,8 @@ const {sendMessage} = require("./telegramBot.js");
 
 require('dotenv').config();
 
+const TELEGRAM_CHAT_ID =  process.env.TELEGRAM_CHAT_ID
+
 // Convert db.all and db.get to promises
 //
 //
@@ -137,6 +139,7 @@ The FabForm Team.
 				mail.sendMail(customerEmail, "", subject, msg)
 				// Send me a copy of the order email
 				mail.sendMail("irishgeoff@yahoo.com","", subject + ' (COPY)', msg);
+				sendMessage(TELEGRAM_CHAT_ID,msg)
 			})
 
 			// Then define and call a function to handle the event charge.succeeded
