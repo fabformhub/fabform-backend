@@ -20,6 +20,7 @@ const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
 const cookieParser = require('cookie-parser');
+const {sendMessage} = require("./telegramBot.js");
 
 require('dotenv').config();
 
@@ -975,6 +976,8 @@ Then, update your HTML or JavaScript with the new form endpoint.
     const defSubject = `fabform.io form ${row.id} submission`;
     const respFormData = fillTemplate(formData, row.email_template);
     const autoRespFormData = fillTemplate(formData, row.auto_resp_template);
+	      
+    const telegramFormData = fillTemplate(formData, row.telegram_chat_id);
 
     // Process only if _gotcha is empty or not set
     if (!formData._gotcha || formData._gotcha === '') {
@@ -994,6 +997,11 @@ Then, update your HTML or JavaScript with the new form endpoint.
         [id]
       );
       const tier = userRow.tier;
+
+	    // send telegram notification
+      if (row.telegram_chat_id) {
+	    sendMessage(row.telegram_chat_id,respFormData)
+    }
 
       // Send notification email if conditions are met:
       if (isEmail(row.resp_email) && row.email_notification && tier == 1) {
@@ -1093,7 +1101,8 @@ app.post('/f/endpoint/:id', function(req, res) {
     autoRespTemplate,
     googleSheetId,
     webhookUrl,
-    redirectUrl
+    redirectUrl,
+    telegramChatId
   } = req.body;
 
   db.run(
@@ -1110,7 +1119,8 @@ app.post('/f/endpoint/:id', function(req, res) {
          google_sheet_Id = ?, 
          webhook_url = ?, 
          redirect_url = ?, 
-         reply_to = ?
+         reply_to = ?,
+	 telegram_chat_id= ?
      WHERE id = ?`,
     [
       name,
@@ -1120,12 +1130,13 @@ app.post('/f/endpoint/:id', function(req, res) {
       emailNotification,
       autoRespEmailSubject,
       autoResp,
-      emailTemplate,          // ← FIXED
+      emailTemplate,          
       autoRespTemplate,
       googleSheetId,
       webhookUrl,
       redirectUrl,
       replyTo,
+      telegramChatId,
       id
     ],
     function(err) {
