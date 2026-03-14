@@ -118,21 +118,18 @@ app.post('/f/order_event', express.raw({
 
 			const msg = `
 
-Hello ${customerName}
+Hello ${customerName},
 
 Thank you for your FabForm order.
 
-You have successfully been upgraded to the Lifetime Plan.
+Your account has now been upgraded to the Lifetime Plan, using the email address ${customerEmail}.
 
-We hope you enjoy using FabForm.
+We hope you enjoy everything FabForm has to offer.
 
-When you login to fabform, if it still shows you are on the free plan.
-Press Ctrl+F5 to refresh the page with the lifetime plan settings.
+If you log in and still see the Free Plan, simply press Ctrl + F5 to refresh your browser and load your updated Lifetime access.
 
 Regards,
-
-The FabForm Team.
-
+The FabForm Team
 `
 			const subject = 'FabForm order'
 			db.run(`UPDATE users SET tier = 1 WHERE email =?`, [customerEmail], function(err) {
