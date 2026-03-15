@@ -748,31 +748,46 @@ app.post('/f/resend-email-verification', (req, res) => {
 
 // verify email address
 //
-app.get('/f/verify_email/:uid', function(req, res) {
-    title = "verify email"
-    var uid = req.params.uid;
-    var email
 
-    db.get("SELECT uid, email, verified from users where uid=?", [uid], (error, row) => {
-        if (row) {
-            email = row.email
-            db.run(`UPDATE users SET verified = 1 WHERE uid =?`, [uid], function(err) {
-                sendEmailWelcome(email);
-                res.redirect('https://fabform.io/success');
-            })
-        } else {
-            res.redirect('/');
-        }
-    })
-})
-
-// GET /test 
+        // GET /test 
 app.get("/f/test", (req, res) => 
 	{ 
        mail.sendMail("irishgeoff@yahoo.com", "info@fabform.io", "test route and email ", "<p>Hello there! from test</p>");
 		res.json({ message: "GET test OK" }); 
 	});
 
+
+app.get('/f/verify_email/:uid', function(req, res) {
+    const uid = req.params.uid;
+
+    db.get("SELECT uid, email, verified FROM users WHERE uid=?", [uid], (error, row) => {
+        if (!row) {
+            return res.render("email-confirmed", {
+                success: false,
+                email: null
+            });
+        }
+
+        const email = row.email;
+
+        db.run("UPDATE users SET verified = 1 WHERE uid=?", [uid], function(err) {
+            if (err) {
+                return res.render("email-confirmed", {
+                    success: false,
+                    email: null
+                });
+            }
+
+            sendEmailWelcome(email);
+
+            // Render the EJS page with the actual email
+            res.render("email-confirmed", {
+                success: true,
+                email: email
+            });
+        });
+    });
+});
 
 
 app.get('/f/:id', function(req, res) {
