@@ -126,7 +126,7 @@ Your account has now been upgraded to the Lifetime Plan, using the email address
 
 We hope you enjoy everything FabForm has to offer.
 
-If you log in and still see the Free Plan, simply press Ctrl + F5 to refresh your browser and load your updated Lifetime access.
+If you log in and still see the Free Plan, simply logout of your account and log back in.
 
 Regards,
 The FabForm Team
