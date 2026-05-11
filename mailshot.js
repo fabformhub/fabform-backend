@@ -1,26 +1,32 @@
-const mail = require("./mail");
-const sqlite3 = require("sqlite3");
-const db = new sqlite3.Database("./db.db");
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
+import * as mail from "./mail.js";
 
-const subject = "Important: FabForm Free Tier Is Being Discontinued";
+const subject = "Your FabForm Account Requires Action — Free Tier Ending Soon";
 
 const msg = `
 Hey there,
 
-We’re reaching out with an important update about your FabForm account, and we wanted to be upfront with you as early as possible.
+We’re reaching out with an important update about your FabForm account, and we want to make sure you have complete clarity before anything changes.
 
-We’re discontinuing our free tier soon. This means your existing forms will become inactive unless you upgrade to a paid plan. We know this may be unexpected, and we genuinely appreciate everyone who has supported FabForm from the early days — including you.
+FabForm’s free tier is being discontinued soon. When this happens, your existing forms will automatically become inactive unless you upgrade. We know this is a significant shift, which is why we’re giving you advance notice — so you stay fully in control and avoid any unexpected interruptions.
 
-Our goal is to give you enough time to make the right decision for your workflow, without any surprises or sudden interruptions. Upgrading keeps all your forms active and unlocks higher limits, advanced features, and priority support.
+Here’s the good news: you have options.
 
-You can review the available plans here:
+Upgrading keeps all your forms live, prevents any downtime, and unlocks higher limits, advanced features, and priority support. For many users, even the entry plan saves hours of manual work every month.
+
+### A One‑Time Lifetime Deal (No Recurring Fees)
+To make this transition easier, we’re offering a **limited lifetime plan for just £29.95**.  
+You pay once — **no monthly fees, no renewals, no recurring charges ever**.
+
+This offer is only available during the free‑tier shutdown period and won’t return once it closes.
+
+You can review all plans here:  
 https://fabform.io/pricing/
 
-If this change creates any difficulty or you’re unsure which plan fits best, just reply to this email — we’re here to help, and we’ll do everything we can to make the transition smooth.
+If you’re unsure which option fits your workflow or you’re facing any difficulty with this change, just reply to this email. We’ll help you choose the most cost‑effective path and make the transition smooth.
 
-Thank you for being part of FabForm. We truly appreciate you.
-
-— The FabForm Team
+Thank you for being part of FabForm — your support genuinely means a lot to us.
 `;
 
 function sleep(ms) {
@@ -28,33 +34,61 @@ function sleep(ms) {
 }
 
 async function main() {
-  const query = `SELECT email FROM users WHERE tier = 0;`;
+  const db = await open({
+    filename: "./db.db",
+    driver: sqlite3.Database
+  });
 
-  db.all(query, async (error, rows) => {
-    if (error) {
-      console.error("Error fetching data:", error);
-      return;
-    }
+  const rows = await db.all(
+    "SELECT id, email FROM users WHERE tier = 0 AND email_sent = 0;"
+  );
 
-    const emails = rows.map(r => r.email);
+  console.log(`Preparing to send ${rows.length} emails...`);
 
-    console.log(`Preparing to send ${emails.length} emails...`);
+  for (const row of rows) {
+    const { id, email } = row;
 
-    for (const email of emails) {
-      console.log("Sending to:", email);
+    console.log("Sending to:", email);
 
-      try {
-        await mail.sendMail(email, "", subject, msg);
-      } catch (err) {
-        console.error("Failed to send to:", email, err);
+    let result;
+
+    try {
+      result = await mail.sendMail(email, "", subject, msg);
+    } catch (err) {
+      console.error("THROWN ERROR:", err);
+
+      // STOP on thrown quota error
+      if (err?.statusCode === 429 || err?.name === "daily_quota_exceeded") {
+        console.error("Daily quota reached. Stopping mailshot.");
+        break;
       }
 
-      // Throttle to avoid SMTP rate limits
-      await sleep(500);
+      console.error("Fatal send error. Stopping mailshot.");
+      break;
     }
 
-    console.log("All emails sent.");
-  });
+    // 🔥 CRITICAL: detect errors returned INSIDE the result object
+    if (
+      !result ||
+      result?.statusCode === 429 ||
+      result?.name === "daily_quota_exceeded"
+    ) {
+      console.error("PROVIDER ERROR:", result);
+
+      console.error("Daily quota reached. Stopping mailshot.");
+      break;
+    }
+
+    // SUCCESS ONLY
+    console.log("Email sent:", result);
+    await db.run("UPDATE users SET email_sent = 1 WHERE id = ?", id);
+    console.log("Marked as sent:", email);
+
+    await sleep(500);
+  }
+
+  console.log("Mailshot finished.");
+  await db.close();
 }
 
 main();
