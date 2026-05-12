@@ -1,28 +1,36 @@
-const express = require('express')
-const he = require('he');
-const nanoid = require('nanoid')
-const ejs = require('ejs');
-const sqlite3 = require('sqlite3');
-const session = require('express-session');
-const SQLiteStore = require('connect-sqlite3')(session);
-const cors = require('cors');
-const morgan = require('morgan');
-const favicon = require('serve-favicon');
-const os = require('os');
-const http2 = require('http2');
-const mail = require('./mail.js');
-const db = new sqlite3.Database('./db.db');
-const fs = require('fs');
-const path = require('path');
-const multer = require('multer')
-const util = require('util');
-const axios = require("axios");
-const jwt = require("jsonwebtoken");
-const { OAuth2Client } = require("google-auth-library");
-const cookieParser = require('cookie-parser');
-const {sendMessage} = require("./telegramBot.js");
+import { nanoid } from 'nanoid';
+import ejs from 'ejs';
+import sqlite3 from 'sqlite3';
+import express from 'express';
+const session = (await import('express-session')).default; // Express session is still CommonJS, so we dynamically import it
+const SQLiteStore = (await import('connect-sqlite3')).default(session);
+import cors from 'cors';
+import morgan from 'morgan';
+import favicon from 'serve-favicon';
+import os from 'os';
+import http2 from 'http2';
+import * as mail from "./mail.js";
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import util from 'util';
+import axios from 'axios';
+import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
+import cookieParser from 'cookie-parser';
+import he from 'he';
 
-require('dotenv').config();
+import Stripe from 'stripe';
+const stripe = new Stripe(process.env.STRIPE_API_KEY);
+import { sendMessage } from './telegramBot.js';
+const db = new sqlite3.Database('./db.db');
+
+
+//const sheets = require('./sheets.js');
+//
+
+
+import 'dotenv/config';
 
 const TELEGRAM_CHAT_ID =  process.env.TELEGRAM_CHAT_ID
 
@@ -56,11 +64,7 @@ const storage = multer.diskStorage({
 const upload = multer({
 	storage: storage
 });
-const stripe = require('stripe')(process.env.STRIPE_API_KEY);
 
-//
-//const sheets = require('./sheets.js');
-//
 
 const app = express();
 
@@ -86,7 +90,6 @@ const endpointSecret = "whsec_b6kNnUBEDqEvSUvnPJEB8ddRyjaP9kty";
 app.get('/f/ref/:id', function(req, res) {
 	//var id = req.params.id;
 	res.redirect('/');
-
 })
 
 // Had to put this before the app.use(express.json()) // for json
@@ -570,9 +573,12 @@ where email = '${email}';
 
 
 app.post('/f/login', (req, res) => {
-	email = req.body.email
-	password = req.body.password
+	const email = req.body.email
+	const password = req.body.password
 
+	console.log(email);
+	console.log(password);
+	
 	db.get("SELECT id, email, password, verified, tier from users where email=? and password=?", [email, password], (error, row) => {
 		if (row) {
 			if (row.verified == 1) {
@@ -1213,7 +1219,7 @@ success: true
                     db.all("SELECT endpoint_id,id, created_at, form_data from submissions where endpoint_id=? ORDER BY id DESC", [endpoint_id], (error, rows) => {
                         if (rows) {
                             let newRows = [];
-                            for (r of rows) {
+                            for (const r of rows) {
                                 newRows.push({
                                     id: r.id,
                                     created_at: r.created_at,

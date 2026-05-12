@@ -1,10 +1,12 @@
-require('dotenv').config();
-const { Resend } = require('resend');
+import dotenv from 'dotenv';
+import { Resend } from 'resend';
+
+// Load environment variables from .env
+dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 async function sendMail(to, replyTo, subject, msg) {
-
   // Footer strings
   const footerHtml = `
     <br><br>
@@ -27,14 +29,15 @@ async function sendMail(to, replyTo, subject, msg) {
 
     if (error) {
       console.error("Error sending email:", error);
-      return;
+      return { success: false, error };
     }
 
     console.log("Email sent:", data);
+    return { success: true, data };
   } catch (err) {
     console.error("Error sending email:", err);
+    return { success: false, error: err };
   }
 }
 
-module.exports = { sendMail };
-
+export { sendMail };
